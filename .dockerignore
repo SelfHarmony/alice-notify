@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+*.egg-info
+.env
+.session.json
+data
+scripts/legacy
+.idea
+.vscode

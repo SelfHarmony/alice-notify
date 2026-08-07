@@ -1,0 +1,15 @@
+services:
+  alice-mcp:
+    build: .
+    container_name: alice-mcp
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: "8848"
+      MCP_PATH: /mcp
+      SESSION_CACHE_PATH: /data/.session.json
+    volumes:
+      - ./data:/data
+    ports:
+      - "8848:8848"

@@ -1,0 +1,33 @@
+# Секреты — НИКОГДА не коммитим
+.env
+.session.json
+*.session
+*.session-journal
+userbot.session*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Логи проб
+*.log
+scripts/*.out
+
+# Docker volume с кэшем сессии
+data/
+
+# Архив экспериментов с Telegram (не часть рабочего проекта)
+scripts/legacy/
