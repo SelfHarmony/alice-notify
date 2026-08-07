@@ -31,9 +31,9 @@ class Settings(BaseSettings):
 
     # --- Общее ---
     reply_timeout_seconds: int = 20
-    # Максимальная длина одного TTS-чанка. Лимит Яндекса — 100 символов на команду/фразу,
-    # берём с запасом. Длинный текст режется на несколько шагов сценария.
-    tts_chunk_size: int = 90
+    # Максимальная длина одного TTS-чанка. Прямая озвучка (phrase_action) допускает ~550;
+    # берём с запасом. Длинный текст режется на несколько последовательных фраз.
+    tts_chunk_size: int = 500
     # Файл-кэш сессии (Session_id cookie + x-csrf-token), выводимой из x-token.
     session_cache_path: str = str(PROJECT_ROOT / ".session.json")
 

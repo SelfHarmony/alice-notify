@@ -29,5 +29,8 @@ scripts/*.out
 # Docker volume с кэшем сессии
 data/
 
+# Lock-файл uv — проект на pip, не коммитим (появляется, если запускали uv)
+uv.lock
+
 # Архив экспериментов с Telegram (не часть рабочего проекта)
 scripts/legacy/

@@ -1,11 +1,11 @@
 """QuasarClient — обёртка над неофициальным API iot.quasar.yandex.ru.
 
 Основано на AlexxIT/YandexStation. Ключевые факты:
-- TTS/голосовые команды на колонку идут НЕ прямым device-action, а через сценарий:
-  на колонку заводится сценарий со скрытым голосовым триггером (encode(device_id)),
-  перед запуском в него подставляется нужный текст, затем сценарий запускается.
-- Прямой device-action (свет, розетки и т.п.): POST /user/{item_type}s/{id}/actions.
-- Напоминания/будильники — отдельный gproxy API (rpc.alice.yandex.ru).
+- Озвучка/команды на колонку — прямой device-action server_action: phrase_action (произнести
+  текст, лимит ~550) и text_action (голосовая команда, лимит 100).
+- Управление устройствами (свет, розетки): POST /user/{item_type}s/{id}/actions.
+- Сценарии — отдельный CRUD (/user/scenarios); повторяющиеся напоминания = timetable-TTS сценарий.
+- Напоминания/будильники (структурные) — gproxy API (rpc.alice.yandex.ru).
 """
 
 from __future__ import annotations
@@ -20,15 +20,28 @@ import httpx
 # Минимальный интервал между запросами к API (антифлуд, как в AlexxIT)
 MIN_REQUEST_INTERVAL = 0.3
 
-# Лимит Яндекса на длину фразы/команды Алисе (QUASAR_SERVER_ACTION_LENGTH_ERROR)
+# Лимит на голосовую КОМАНДУ (text_action) и на шаг сценария — 100 символов.
 MAX_ALICE_TEXT = 100
+# Лимит прямой ОЗВУЧКИ фразой (phrase_action на устройство) — ~550, берём с запасом.
+MAX_TTS_TEXT = 500
+# Оценка скорости речи Алисы (символов/сек) — для пауз между чанками при длинном тексте.
+SPEAK_CHARS_PER_SEC = 14
+
+# Именованные цвета палитры умного дома Яндекса (instance="color", value=<id>).
+# Это ЕДИНСТВЕННЫЙ надёжный способ задать цвет через это облако: instance hsv/rgb/scene/
+# temperature_k у color_setting облачным API не поддерживаются (возвращают 400 BAD_REQUEST).
+PALETTE_COLORS: dict[str, str] = {
+    "soft_white": "мягкий белый", "warm_white": "тёплый белый", "white": "белый",
+    "daylight": "дневной белый", "cold_white": "холодный белый",
+    "red": "красный", "coral": "коралловый", "orange": "оранжевый", "yellow": "жёлтый",
+    "lime": "салатовый", "green": "зелёный", "emerald": "изумрудный",
+    "turquoise": "бирюзовый", "cyan": "голубой", "blue": "синий", "moonlight": "лунный",
+    "lavender": "сиреневый", "violet": "фиолетовый", "purple": "пурпурный",
+    "orchid": "розовый", "raspberry": "малиновый", "mauve": "лиловый",
+}
 
 from ..config import Settings
 from .auth import YandexAuth
-
-# --- кодирование device_id в скрытый голосовой триггер (из AlexxIT) ---
-MASK_EN = "0123456789abcdef-"
-MASK_RU = "оеаинтсрвлкмдпуяы"
 
 # Заголовки для gproxy API будильников/напоминаний (rpc.alice.yandex.ru)
 ALARM_HEADERS = {
@@ -37,43 +50,6 @@ ALARM_HEADERS = {
     "x-ya-app-type": "iot-app",
     "x-ya-application": '{"app_id":"unknown","uuid":"unknown","lang":"ru"}',
 }
-
-
-def encode(uid: str) -> str:
-    """UID (hex + дефисы) → русские буквы: скрытый голосовой триггер сценария."""
-    return "".join(MASK_RU[MASK_EN.index(s)] for s in uid)
-
-
-def scenario_speaker_tts(name: str, trigger: str, device_id: str, text: str) -> dict:
-    """Сценарий: колонка произносит text дословно (умение quasar/tts)."""
-    return {
-        "name": name,
-        "icon": "home",
-        "triggers": [{"trigger": {"type": "scenario.trigger.voice", "value": trigger}}],
-        "steps": [
-            {
-                "type": "scenarios.steps.actions.v2",
-                "parameters": {
-                    "items": [
-                        {
-                            "id": device_id,
-                            "type": "step.action.item.device",
-                            "value": {
-                                "id": device_id,
-                                "item_type": "device",
-                                "capabilities": [
-                                    {
-                                        "type": "devices.capabilities.quasar",
-                                        "state": {"instance": "tts", "value": {"text": text}},
-                                    }
-                                ],
-                            },
-                        }
-                    ]
-                },
-            }
-        ],
-    }
 
 
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
@@ -124,40 +100,6 @@ def chunk_text(text: str, max_len: int = 200) -> list[str]:
     return final
 
 
-def _tts_step(device_id: str, text: str) -> dict:
-    return {
-        "type": "scenarios.steps.actions.v2",
-        "parameters": {
-            "items": [
-                {
-                    "id": device_id,
-                    "type": "step.action.item.device",
-                    "value": {
-                        "id": device_id,
-                        "item_type": "device",
-                        "capabilities": [
-                            {
-                                "type": "devices.capabilities.quasar",
-                                "state": {"instance": "tts", "value": {"text": text}},
-                            }
-                        ],
-                    },
-                }
-            ]
-        },
-    }
-
-
-def scenario_multi_tts(name: str, trigger: str, device_id: str, chunks: list[str]) -> dict:
-    """Сценарий: колонка последовательно произносит все chunks (по TTS-шагу на чанк)."""
-    return {
-        "name": name,
-        "icon": "home",
-        "triggers": [{"trigger": {"type": "scenario.trigger.voice", "value": trigger}}],
-        "steps": [_tts_step(device_id, ch) for ch in chunks],
-    }
-
-
 def scenario_tts_timetable(
     name: str, device_id: str, text: str, time_offset: int, days_of_week: list[str]
 ) -> dict:
@@ -203,24 +145,11 @@ def scenario_tts_timetable(
     }
 
 
-def scenario_speaker_action(name: str, trigger: str, device_id: str, action: str) -> dict:
-    """Сценарий: колонка выполняет action как голосовую команду (server_action/text_action)."""
-    payload = scenario_speaker_tts(name, trigger, device_id, "")
-    payload["steps"][0]["parameters"]["items"][0]["value"]["capabilities"] = [
-        {
-            "type": "devices.capabilities.quasar.server_action",
-            "state": {"instance": "text_action", "value": action},
-        }
-    ]
-    return payload
-
-
 class QuasarClient:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.base = settings.quasar_base_url.rstrip("/")
         self.auth = YandexAuth(settings.yandex_x_token or "", settings.session_cache_path)
-        self._scenario_cache: dict[str, str] = {}
         self._last_ts = 0.0
         self._req_lock = asyncio.Lock()
 
@@ -270,7 +199,7 @@ class QuasarClient:
             self.auth.invalidate_csrf()
             return await self._request(method, path, retry - 1, **kwargs)
         raise httpx.HTTPStatusError(
-            f"{method.upper()} {url} → {r.status_code}: {r.text[:300]}",
+            f"{method.upper()} {url} → {r.status_code}: {r.text[:600]}",
             request=r.request,
             response=r,
         )
@@ -291,6 +220,36 @@ class QuasarClient:
         body = {"actions": [{"type": capability_type, "state": {"instance": instance, "value": value}}]}
         r = await self._request("post", f"/user/{item_type}s/{device_id}/actions", json=body)
         return self._check(r.json(), "device_action")
+
+    async def get_light_colors(self, device_id: str) -> dict[str, Any]:
+        """Палитра, реально поддерживаемая КОНКРЕТНОЙ лампой (из её color_setting.parameters).
+
+        Возвращает {palette:[id...], temperature_k:{min,max}|None, color_model|None}.
+        Палитра у разных устройств различается — это точный источник, в отличие от общего списка.
+        """
+        r = await self._request("get", f"/user/devices/{device_id}")
+        dev = self._check(r.json(), "get_device")
+        for cap in dev.get("capabilities", []):
+            if cap.get("type") == "devices.capabilities.color_setting":
+                p = cap.get("parameters", {}) or {}
+                return {
+                    "palette": [c.get("id") for c in (p.get("palette") or [])],
+                    "temperature_k": p.get("temperature_k"),
+                    "color_model": p.get("color_model"),
+                }
+        return {"palette": [], "temperature_k": None, "color_model": None}
+
+    async def set_light_color(
+        self, device_id: str, color_id: str, item_type: str = "device"
+    ) -> dict[str, Any]:
+        """Задать именованный цвет/белый из палитры Яндекса (надёжный способ смены цвета)."""
+        if color_id not in PALETTE_COLORS:
+            raise ValueError(
+                f"Неизвестный цвет '{color_id}'. Доступные id: {', '.join(PALETTE_COLORS)}"
+            )
+        return await self.device_action(
+            device_id, "devices.capabilities.color_setting", "color", color_id, item_type
+        )
 
     # --- сценарии (CRUD) ---
     async def scenarios(self) -> list[dict[str, Any]]:
@@ -317,88 +276,39 @@ class QuasarClient:
         r = await self._request("post", f"/user/scenarios/{scenario_id}/actions")
         return self._check(r.json(), "run_scenario")
 
-    # --- TTS / голосовые команды через сценарий ---
-    async def _find_scenario_id(self, device_id: str) -> str | None:
-        if device_id in self._scenario_cache:
-            return self._scenario_cache[device_id]
-        trigger = encode(device_id)
-        for s in await self.scenarios():
-            try:
-                if s["triggers"][0]["value"] == trigger:
-                    self._scenario_cache[device_id] = s["id"]
-                    return s["id"]
-            except (KeyError, IndexError, TypeError):
-                continue
-        return None
-
-    @staticmethod
-    def _first_step_text(info: dict) -> Any:
-        """Текст/значение первого шага сценария (для верификации, что спека применилась)."""
-        try:
-            cap = info["steps"][0]["parameters"]["items"][0]["value"]["capabilities"][0]
-            val = cap["state"]["value"]
-            return val.get("text") if isinstance(val, dict) else val
-        except (KeyError, IndexError, TypeError):
-            return None
-
-    async def _ensure_scenario(self, device_id: str, spec: dict, expected_first: Any) -> str:
-        """Создаёт (с реальным содержимым) или обновляет сценарий колонки и ГАРАНТИРУЕТ,
-        что нужная спека реально сохранилась: ретраи с бэкоффом на транзиентные ошибки API
-        (status=error / rate-limit) + проверка содержимого перед запуском.
-        """
-        sid = await self._find_scenario_id(device_id)
-        last_err: Exception | None = None
-        for attempt in range(6):
-            try:
-                if sid is None:
-                    sid = await self.create_scenario(spec)
-                    self._scenario_cache[device_id] = sid
-                else:
-                    await self.update_scenario(sid, spec)
-                info = await self.scenario_edit_info(sid)
-                if self._first_step_text(info) == expected_first:
-                    return sid
-                last_err = RuntimeError("содержимое сценария не совпало после сохранения")
-            except Exception as exc:  # noqa: BLE001 — транзиентные ошибки API
-                last_err = exc
-            await asyncio.sleep(0.6 * (attempt + 1))
-        raise RuntimeError(f"Не удалось применить сценарий озвучки: {last_err}")
-
     async def say(self, text: str, device_id: str | None = None, is_command: bool = False) -> dict[str, Any]:
         """Колонка произносит text (is_command=False) или выполняет как голосовую команду (True).
 
-        Длинный текст (> tts_chunk_size) автоматически режется на несколько TTS-шагов,
-        которые колонка произносит подряд в одном сценарии.
+        Озвучка идёт прямой командой phrase_action на устройство (лимит ~550), длинный текст
+        режется на несколько фраз подряд. Команда (is_command) — через text_action (лимит 100).
         """
         device_id = device_id or self.settings.station_device_id
         if not device_id:
             raise RuntimeError("Не задан STATION_DEVICE_ID (см. scripts/discover.py)")
-        name = f"alice-notify {device_id}"
-        trigger = encode(device_id)
-        chunks = 1
+
         if is_command:
-            # Команду (голосовую/напоминание) нельзя разбить — валидируем длину.
+            # Голосовую команду/напоминание нельзя разбить — валидируем длину.
             if len(text) > MAX_ALICE_TEXT:
                 raise ValueError(
                     f"Команда Алисе не длиннее {MAX_ALICE_TEXT} символов "
                     f"(сейчас {len(text)}). Сократите текст."
                 )
-            spec = scenario_speaker_action(name, trigger, device_id, text)
-            expected_first = text
-        else:
-            # TTS-текст режем на чанки строго ≤ лимита (даже если в конфиге больше).
-            size = min(self.settings.tts_chunk_size, MAX_ALICE_TEXT)
-            parts = chunk_text(text, size)
-            chunks = len(parts)
-            spec = (
-                scenario_multi_tts(name, trigger, device_id, parts)
-                if chunks > 1
-                else scenario_speaker_tts(name, trigger, device_id, parts[0] if parts else text)
+            await self.device_action(
+                device_id, "devices.capabilities.quasar.server_action", "text_action", text
             )
-            expected_first = parts[0] if parts else text
-        sid = await self._ensure_scenario(device_id, spec, expected_first)
-        result = await self.run_scenario(sid)
-        return {"chunks": chunks, **result}
+            return {"chunks": 1, "status": "ok"}
+
+        # TTS: прямая озвучка phrase_action, чанки ≤ лимита прямой озвучки.
+        size = min(self.settings.tts_chunk_size, MAX_TTS_TEXT)
+        parts = chunk_text(text, size) or [""]
+        for i, part in enumerate(parts):
+            await self.device_action(
+                device_id, "devices.capabilities.quasar.server_action", "phrase_action", part
+            )
+            if i < len(parts) - 1:
+                # пауза ≈ время произнесения чанка, чтобы фразы не наложились
+                await asyncio.sleep(len(part) / SPEAK_CHARS_PER_SEC + 1.5)
+        return {"chunks": len(parts), "status": "ok"}
 
     # --- будильники / напоминания (gproxy) ---
     async def speaker_config(self, device_id: str) -> dict[str, Any]:
