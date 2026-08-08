@@ -27,6 +27,22 @@ _lock = asyncio.Lock()
 _holder: dict[str, Any] = {}
 
 
+async def _auth_cookies() -> list[dict]:
+    """Cookie-сессии пользователя (из x-token) — чтобы браузер был залогинен (для «Мои места»)."""
+    try:
+        from .service import get_client
+
+        client = get_client()
+        await client.auth.ensure()
+        return [
+            {"name": ck.name, "value": ck.value, "domain": ".yandex.ru", "path": "/"}
+            for ck in client.auth.client.cookies.jar
+            if (ck.domain or "").endswith("yandex.ru")
+        ]
+    except Exception:
+        return []
+
+
 async def _context() -> Any:
     if _holder.get("ctx"):
         return _holder["ctx"]
@@ -39,6 +55,12 @@ async def _context() -> Any:
     ctx = await browser.new_context(
         locale="ru-RU", user_agent=UA, viewport={"width": 1360, "height": 900}
     )
+    cookies = await _auth_cookies()
+    if cookies:
+        try:
+            await ctx.add_cookies(cookies)
+        except Exception:
+            pass
     _holder.update(pw=pw, browser=browser, ctx=ctx)
     return ctx
 
@@ -217,6 +239,65 @@ async def place_details(oid: str, max_chars: int = 6000) -> dict:
         "url": f"https://yandex.ru/maps/org/{oid}",
         "reviews_text": text[:max_chars],
     }
+
+
+# --- «Мои места» (закладки/списки) через залогиненный браузер ---
+_LIST_POPUP_HEADERS = {"Добавить в список", "Создать список"}
+
+
+async def _open_bookmark_popup(page: Any) -> None:
+    await page.get_by_role("button", name="Закладки").first.click()
+    await page.wait_for_timeout(1500)
+
+
+async def get_lists(oid: str) -> list[str]:
+    """Список названий «Мои места» пользователя (открывает попап закладок на карточке oid)."""
+    async with _lock:
+        ctx = await _context()
+        page = await ctx.new_page()
+        try:
+            await page.goto(
+                f"https://yandex.ru/maps/org/{oid}", wait_until="domcontentloaded", timeout=60000
+            )
+            await page.wait_for_timeout(3500)
+            await _open_bookmark_popup(page)
+            anc = page.locator(
+                'xpath=//*[normalize-space(text())="Создать список"]/ancestor::*[4]'
+            ).first
+            txt = await anc.inner_text()
+        finally:
+            await page.close()
+    names = [line.strip() for line in txt.splitlines() if line.strip()]
+    return [n for n in names if n not in _LIST_POPUP_HEADERS]
+
+
+async def add_place_to_list(oid: str, list_name: str) -> dict:
+    """Добавить место (oid) в список list_name. Если уже там — ничего не меняет (не удаляет)."""
+    async with _lock:
+        ctx = await _context()
+        page = await ctx.new_page()
+        try:
+            await page.goto(
+                f"https://yandex.ru/maps/org/{oid}", wait_until="domcontentloaded", timeout=60000
+            )
+            await page.wait_for_timeout(3500)
+            await _open_bookmark_popup(page)
+            cb = page.get_by_role("checkbox", name=list_name)
+            if await cb.count() == 0:
+                # запасной путь — клик по строке с названием списка
+                row = page.get_by_text(list_name, exact=True).first
+                if await row.count() == 0:
+                    raise ValueError(f"Список «{list_name}» не найден")
+                await row.click()
+                await page.wait_for_timeout(1200)
+                return {"ok": True, "oid": oid, "list": list_name, "added": True, "note": "via-text"}
+            already = await cb.first.is_checked()
+            if not already:
+                await cb.first.check()
+                await page.wait_for_timeout(1200)
+            return {"ok": True, "oid": oid, "list": list_name, "added": not already, "already": already}
+        finally:
+            await page.close()
 
 
 async def aclose() -> None:

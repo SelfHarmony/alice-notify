@@ -95,7 +95,7 @@ claude mcp add alice-notify -- python -m alice_notify.mcp_server
 `alice_list_scenarios`, `alice_get_scenario`, `alice_create_scenario`,
 `alice_update_scenario`, `alice_delete_scenario`, `alice_run_scenario`,
 `alice_find_places`, `alice_find_places_rated`, `alice_place_details`, `alice_place_url`,
-`alice_build_route`.
+`alice_build_route`, `alice_my_lists`, `alice_add_place_to_list`.
 
 Гео-тулы: `alice_find_places` — быстрые подсказки Карт (конкретные названия/сети с расстоянием);
 `alice_find_places_rated` — поиск мест рядом **с рейтингами** через headless-браузер (обходит
@@ -122,8 +122,12 @@ curl -X POST localhost:8000/say \
 Гео (для приложений): `POST /geo/find_rated` `{text, lat/lon | near, radius_m?, min_rating?,
 open_now?}` → места с рейтингами/атрибутами/тональностью отзывов, сортировка по близости;
 `POST /geo/find` (быстрые подсказки); `POST /geo/route` `{points, mode}`;
-`GET /geo/place/{oid}` (отзывы/тональность/тексты); `GET /geo/place_url/{oid}`.
+`GET /geo/place/{oid}` (отзывы/тональность/тексты); `GET /geo/place_url/{oid}`;
+`GET /geo/lists?oid=…` и `POST /geo/lists/add` («Мои места»: списки и добавление).
 В деплое REST поднят отдельным сервисом `alice-api` (порт 8000). Swagger: `/docs`, `/openapi.json`.
+
+«Мои места» работают через залогиненный (куки из x-token) headless-браузер: `get_lists` читает
+названия списков, `add_place_to_list` добавляет место в список (идемпотентно — не удаляет).
 
 ## Docker-деплой (удалённый MCP с авторизацией)
 

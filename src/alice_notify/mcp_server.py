@@ -190,6 +190,21 @@ async def alice_place_details(oid: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def alice_my_lists(oid: str) -> list[str]:
+    """Список названий «Мои места» пользователя (его сохранённые списки/категории).
+    Сначала вызови это, чтобы понять, в какой список логичнее добавить новое место
+    (списков много: Избранное, кафе, отели, рыбалка и т.п.). oid — любой org (напр. добавляемое место)."""
+    return await geo_browser.get_lists(oid)
+
+
+@mcp.tool()
+async def alice_add_place_to_list(oid: str, list_name: str) -> dict[str, Any]:
+    """Добавить место (oid) в один из списков «Мои места» по его названию. Если место уже в списке —
+    ничего не меняет (не удаляет). Название бери точно из alice_my_lists."""
+    return await geo_browser.add_place_to_list(oid, list_name)
+
+
+@mcp.tool()
 def alice_place_url(oid: str) -> dict[str, str]:
     """Надёжная ссылка на карточку конкретного места в Яндекс.Картах по его oid
     (oid берётся из результатов alice_find_places / alice_find_places_rated).

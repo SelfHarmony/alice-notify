@@ -102,6 +102,23 @@ async def geo_place_details(oid: str) -> dict[str, Any]:
     return await geo_browser.place_details(oid)
 
 
+@app.get("/geo/lists", dependencies=[Depends(auth)])
+async def geo_lists(oid: str) -> list[str]:
+    """Список названий «Мои места» пользователя (нужен любой oid для контекста)."""
+    return await geo_browser.get_lists(oid)
+
+
+class ListAddIn(BaseModel):
+    oid: str
+    list_name: str
+
+
+@app.post("/geo/lists/add", dependencies=[Depends(auth)])
+async def geo_lists_add(body: ListAddIn) -> dict[str, Any]:
+    """Добавить место (oid) в список «Мои места» по названию."""
+    return await geo_browser.add_place_to_list(body.oid, body.list_name)
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
