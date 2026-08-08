@@ -157,20 +157,44 @@ async def alice_find_places(text: str, lat: float, lon: float) -> list[dict[str,
 
 @mcp.tool()
 async def alice_find_places_rated(
-    text: str, lat: float, lon: float, min_rating: float | None = None
-) -> list[dict[str, Any]]:
-    """Найти места рядом С РЕЙТИНГАМИ (через реальный браузер Карт — проходит анти-бот).
-    Возвращает name, rating, reviews, categories, address, distance_m, lat/lon, oid, hours —
-    отсортировано по близости. min_rating — фильтр (например 4.8). lat/lon — координаты
-    пользователя. Медленнее обычного поиска (запускает браузер), зато с рейтингами и близостью."""
-    return await geo_browser.search_rated(text, lat, lon, min_rating=min_rating)
+    text: str,
+    lat: float | None = None,
+    lon: float | None = None,
+    near: str | None = None,
+    radius_m: float | None = None,
+    min_rating: float | None = None,
+    open_now: bool | None = None,
+) -> dict[str, Any]:
+    """Найти места рядом С РЕЙТИНГАМИ и атрибутами (через реальный браузер Карт — проходит анти-бот).
+
+    Центр поиска: координаты lat+lon ЛИБО near (адрес/название — геокодится сам).
+    Фильтры: radius_m (метры), min_rating (напр. 4.8), open_now=True (только открытые сейчас).
+    Возвращает {"center":{lat,lon}, "results":[...]}, отсортировано по близости. У каждого места:
+    name, rating, reviews, open_now, open_text, hours, categories, address, distance_m, lat/lon,
+    phone, website, features (Wi-Fi/кухня/доставка…), review_aspects (тональность отзывов —
+    помогает решить, стоит ли идти), oid, map_url.
+    Открыть место → его map_url; маршрут → его lat/lon в alice_build_route. Браузер медленнее,
+    но даёт рейтинги/атрибуты/близость. Основной инструмент гео-ассистента «найди X рядом»."""
+    return await geo_browser.search_rated(
+        text, lat=lat, lon=lon, near=near, radius_m=radius_m,
+        min_rating=min_rating, open_now=open_now,
+    )
+
+
+@mcp.tool()
+def alice_place_url(oid: str) -> dict[str, str]:
+    """Надёжная ссылка на карточку конкретного места в Яндекс.Картах по его oid
+    (oid берётся из результатов alice_find_places / alice_find_places_rated).
+    Так следует ОТКРЫВАТЬ конкретное заведение — не поиском по названию."""
+    return {"url": maps.place_url(oid)}
 
 
 @mcp.tool()
 def alice_build_route(points: list[Any], mode: str = "auto") -> dict[str, str]:
-    """Ссылка-маршрут Яндекс.Карт по точкам в порядке следования. points — список
-    [lat, lon] или адрес строкой (минимум 2). mode: auto|public|pedestrian|bike.
-    Ссылку открыть на телефоне — построит маршрут."""
+    """Ссылка-маршрут Яндекс.Карт по точкам в порядке следования (минимум 2).
+    Точки — КООРДИНАТЫ [lat, lon] (надёжно) или полный адрес строкой. НАЗВАНИЕ заведения
+    точкой НЕ передавать — не построится. Для маршрута к найденному месту бери его lat/lon.
+    mode: auto|public|pedestrian|bike. Ссылку открыть на телефоне."""
     return {"url": maps.build_route(points, mode)}
 
 

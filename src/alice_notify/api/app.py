@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
+from .. import geo_browser, maps
 from .. import reminders as rem
 from ..config import get_settings
 from ..service import flatten_devices, get_client
@@ -51,6 +52,48 @@ class DeviceActionIn(BaseModel):
     instance: str
     value: Any
     item_type: str = "device"
+
+
+class GeoFindIn(BaseModel):
+    text: str
+    lat: float | None = None
+    lon: float | None = None
+    near: str | None = None  # адрес/название — центр поиска (геокодится)
+    radius_m: float | None = None
+    min_rating: float | None = None
+    open_now: bool | None = None
+
+
+class GeoRouteIn(BaseModel):
+    points: list[Any]  # [[lat,lon], ...] или адреса; минимум 2
+    mode: str = "auto"
+
+
+@app.post("/geo/find_rated", dependencies=[Depends(auth)])
+async def geo_find_rated(body: GeoFindIn) -> dict[str, Any]:
+    """Поиск мест с рейтингами/атрибутами рядом (браузер, обход анти-бота). Центр — lat/lon или near."""
+    return await geo_browser.search_rated(
+        body.text, lat=body.lat, lon=body.lon, near=body.near,
+        radius_m=body.radius_m, min_rating=body.min_rating, open_now=body.open_now,
+    )
+
+
+@app.post("/geo/find", dependencies=[Depends(auth)])
+async def geo_find(body: GeoFindIn) -> list[dict[str, Any]]:
+    """Быстрые подсказки мест (без браузера, без рейтингов). Требует lat/lon."""
+    return await maps.find_places(get_client(), body.text, body.lat or 0.0, body.lon or 0.0)
+
+
+@app.post("/geo/route", dependencies=[Depends(auth)])
+async def geo_route(body: GeoRouteIn) -> dict[str, str]:
+    """Ссылка-маршрут Яндекс.Карт по точкам (координаты). mode: auto|public|pedestrian|bike."""
+    return {"url": maps.build_route(body.points, body.mode)}
+
+
+@app.get("/geo/place_url/{oid}", dependencies=[Depends(auth)])
+async def geo_place_url(oid: str) -> dict[str, str]:
+    """Ссылка на карточку места по oid."""
+    return {"url": maps.place_url(oid)}
 
 
 @app.get("/health")

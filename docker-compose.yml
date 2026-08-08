@@ -1,6 +1,7 @@
 services:
   alice-mcp:
     build: .
+    image: alice-notify:latest
     container_name: alice-mcp
     restart: unless-stopped
     env_file: .env
@@ -13,3 +14,19 @@ services:
       - ./data:/data
     ports:
       - "8848:8848"
+
+  # REST API (FastAPI) — для приложений (Android и т.п.). Тот же образ, другой запуск/порт.
+  alice-api:
+    image: alice-notify:latest
+    container_name: alice-api
+    restart: unless-stopped
+    depends_on:
+      - alice-mcp
+    env_file: .env
+    environment:
+      SESSION_CACHE_PATH: /data/.session.json
+    command: ["uvicorn", "alice_notify.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - ./data:/data
+    ports:
+      - "8000:8000"

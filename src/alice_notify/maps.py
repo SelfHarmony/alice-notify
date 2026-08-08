@@ -72,11 +72,23 @@ async def find_places(
     return out
 
 
+def place_url(oid: str, seoname: str | None = None) -> str:
+    """Ссылка на карточку конкретной организации в Яндекс.Картах по её oid.
+
+    Это НАДЁЖНЫЙ способ открыть конкретное место (в отличие от поиска по названию)."""
+    if seoname:
+        return f"https://yandex.ru/maps/org/{seoname}/{oid}/"
+    return f"https://yandex.ru/maps/org/{oid}"
+
+
 def build_route(points: list[Any], mode: str = "auto") -> str:
     """Ссылка-маршрут Яндекс.Карт по точкам (в порядке следования).
 
-    points — список точек: [lat, lon] / "lat,lon" / адрес строкой.
-    mode: auto | public | pedestrian | bike. Ссылку открыть на телефоне.
+    points — список точек, минимум 2. Каждая точка — КООРДИНАТЫ [lat, lon] или "lat,lon"
+    (надёжно). Полный адрес строкой тоже сойдёт, но НАЗВАНИЕ заведения как точку передавать
+    НЕ надо — Яндекс его не геокодит как точку маршрута. Чтобы построить маршрут к найденному
+    месту, бери его координаты (lat/lon из результатов поиска).
+    mode: auto | public | pedestrian | bike.
     """
     if not points or len(points) < 2:
         raise ValueError("Нужно минимум 2 точки (откуда и куда)")

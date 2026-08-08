@@ -118,6 +118,11 @@ curl -X POST localhost:8000/say \
 `GET /devices`, `POST /devices/{id}/action`, `GET|POST /scenarios`,
 `GET|PUT|DELETE /scenarios/{id}`, `POST /scenarios/{id}/run`, `GET /health`.
 
+Гео (для приложений): `POST /geo/find_rated` `{text, lat/lon | near, radius_m?, min_rating?,
+open_now?}` → места с рейтингами/атрибутами/тональностью отзывов, сортировка по близости;
+`POST /geo/find` (быстрые подсказки); `POST /geo/route` `{points, mode}`;
+`GET /geo/place_url/{oid}`. В деплое REST поднят отдельным сервисом `alice-api` (порт 8000).
+
 ## Docker-деплой (удалённый MCP с авторизацией)
 
 `mcp_remote.py` поднимает MCP по HTTP (streamable-http) и требует общий пароль: каждый клиент
