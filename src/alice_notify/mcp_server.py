@@ -14,6 +14,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from . import maps
 from . import reminders as rem
 from .quasar.client import PALETTE_COLORS
 from .service import flatten_devices, get_client
@@ -141,6 +142,24 @@ async def alice_set_lights(items: list[dict[str, Any]]) -> dict[str, Any]:
             entry["error"] = str(exc)
         results.append(entry)
     return {"results": results}
+
+
+# --- Карты: поиск мест и маршруты ---
+@mcp.tool()
+async def alice_find_places(text: str, lat: float, lon: float) -> list[dict[str, Any]]:
+    """Подсказки мест Яндекс.Карт по запросу возле lat/lon (координаты пользователя).
+    Хорошо для КОНКРЕТНЫХ названий/сетей (отдаёт ближайшие точки с расстоянием и oid).
+    Для общих категорий («кофейня») вернёт скорее рубрику, а не список ближайших —
+    полноценный поиск ближайших/по рейтингу закрыт анти-ботом Карт. Рейтингов нет."""
+    return await maps.find_places(get_client(), text, lat, lon)
+
+
+@mcp.tool()
+def alice_build_route(points: list[Any], mode: str = "auto") -> dict[str, str]:
+    """Ссылка-маршрут Яндекс.Карт по точкам в порядке следования. points — список
+    [lat, lon] или адрес строкой (минимум 2). mode: auto|public|pedestrian|bike.
+    Ссылку открыть на телефоне — построит маршрут."""
+    return {"url": maps.build_route(points, mode)}
 
 
 # --- Сценарии (общий механизм; специфику умений см. в памятке/профильных тулах) ---
