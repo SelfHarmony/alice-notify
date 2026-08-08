@@ -89,6 +89,27 @@ claude mcp add alice-notify -- python -m alice_notify.mcp_server
 
 Удалённо (HTTP + пароль), см. раздел «Docker-деплой».
 
+### Для LLM/агента: быстрый старт
+
+**Подключение:**
+- Локально (stdio): `claude mcp add alice-notify -- python -m alice_notify.mcp_server`
+- Удалённо (HTTP): `claude mcp add --transport http alice --header "Authorization: Bearer <MCP_AUTH_TOKEN>" https://<host>/mcp`
+
+После добавления перезапусти/переподключи клиент, чтобы подтянулись инструменты `alice_*`.
+Сервер отдаёт подробную памятку в своём `instructions` — прочитай её первой.
+
+**Ключевые правила (частые ошибки агентов):**
+- **Цвет ламп** — только палитрой: `alice_set_light_color(device_id, color_id)` (id из
+  `alice_list_colors` / `alice_get_light_colors`). НЕ используй hsv/rgb/scene/temperature_k.
+- **Лимиты текста:** команда/напоминание ≤100 символов; `alice_say` длинный текст режет сам (~550/фраза).
+- **Гео-поиск:** «найди X рядом» → `alice_find_places_rated(text, lat+lon | near, radius_m?, min_rating?, open_now?)`
+  (сортировка по близости, с рейтингами/атрибутами). Открыть место → его `map_url`; маршрут →
+  его `lat/lon` в `alice_build_route` (НЕ по названию!); «стоит ли идти» → `alice_place_details(oid)`.
+- **«Мои места»:** сперва `alice_my_lists(oid)` (увидеть категории), затем
+  `alice_add_place_to_list(oid, list_name)` (идемпотентно, не удаляет).
+- **Проверка эффекта:** `status:"ok"` не всегда значит «сделано»; где в ответе есть
+  `action_result.status` — убедись, что там `"DONE"`.
+
 **Инструменты:** `alice_say`, `alice_command`, `alice_set_date_reminders`,
 `alice_set_recurring_reminder`, `alice_list_devices`, `alice_device_action`,
 `alice_list_colors`, `alice_get_light_colors`, `alice_set_light_color`, `alice_set_lights`,
