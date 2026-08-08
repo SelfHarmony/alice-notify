@@ -185,6 +185,40 @@ async def search_rated(
     return {"center": {"lat": clat, "lon": clon}, "results": out[:limit]}
 
 
+async def place_details(oid: str, max_chars: int = 6000) -> dict:
+    """Отзывы места: тональность по аспектам, нейро-выжимка и тексты отзывов.
+
+    Возвращает {oid, url, reviews_text} — reviews_text это текст страницы отзывов Яндекс.Карт
+    (аспекты с процентами тональности + представительные/полные тексты отзывов). Селекторы
+    Яндекса обфусцированы, поэтому отдаём надёжный текстовый блок — LLM по нему делает саммари
+    и решает «стоит ли идти».
+    """
+    async with _lock:
+        ctx = await _context()
+        page = await ctx.new_page()
+        try:
+            await page.goto(
+                f"https://yandex.ru/maps/org/{oid}/reviews/",
+                wait_until="domcontentloaded",
+                timeout=60000,
+            )
+            await page.wait_for_timeout(3500)
+            # подгрузить больше отзывов скроллом левой панели
+            for _ in range(5):
+                await page.mouse.move(400, 600)
+                await page.mouse.wheel(0, 3000)
+                await page.wait_for_timeout(900)
+            text = await page.inner_text("body")
+        finally:
+            await page.close()
+    text = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+    return {
+        "oid": oid,
+        "url": f"https://yandex.ru/maps/org/{oid}",
+        "reviews_text": text[:max_chars],
+    }
+
+
 async def aclose() -> None:
     for key in ("browser", "pw"):
         obj = _holder.get(key)

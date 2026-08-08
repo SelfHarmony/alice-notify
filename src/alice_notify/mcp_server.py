@@ -182,6 +182,14 @@ async def alice_find_places_rated(
 
 
 @mcp.tool()
+async def alice_place_details(oid: str) -> dict[str, Any]:
+    """Отзывы конкретного места по oid (через браузер): тональность по аспектам, нейро-выжимка
+    и тексты отзывов — единым текстовым блоком reviews_text. По нему делай саммари и вывод
+    «стоит ли идти». oid берётся из результатов alice_find_places_rated."""
+    return await geo_browser.place_details(oid)
+
+
+@mcp.tool()
 def alice_place_url(oid: str) -> dict[str, str]:
     """Надёжная ссылка на карточку конкретного места в Яндекс.Картах по его oid
     (oid берётся из результатов alice_find_places / alice_find_places_rated).

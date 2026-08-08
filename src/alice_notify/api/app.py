@@ -96,6 +96,12 @@ async def geo_place_url(oid: str) -> dict[str, str]:
     return {"url": maps.place_url(oid)}
 
 
+@app.get("/geo/place/{oid}", dependencies=[Depends(auth)])
+async def geo_place_details(oid: str) -> dict[str, Any]:
+    """Отзывы места по oid: аспекты/тональность, нейро-выжимка и тексты (reviews_text)."""
+    return await geo_browser.place_details(oid)
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
