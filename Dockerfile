@@ -6,7 +6,9 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 
-RUN pip install --no-cache-dir ".[mcp,api]"
+RUN pip install --no-cache-dir ".[mcp,api,geo]"
+# Chromium + системные зависимости для гео-поиска с рейтингами (Playwright)
+RUN playwright install --with-deps chromium
 
 ENV PYTHONUNBUFFERED=1 \
     MCP_HOST=0.0.0.0 \

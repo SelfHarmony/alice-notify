@@ -14,6 +14,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from . import geo_browser
 from . import maps
 from . import reminders as rem
 from .quasar.client import PALETTE_COLORS
@@ -152,6 +153,17 @@ async def alice_find_places(text: str, lat: float, lon: float) -> list[dict[str,
     Для общих категорий («кофейня») вернёт скорее рубрику, а не список ближайших —
     полноценный поиск ближайших/по рейтингу закрыт анти-ботом Карт. Рейтингов нет."""
     return await maps.find_places(get_client(), text, lat, lon)
+
+
+@mcp.tool()
+async def alice_find_places_rated(
+    text: str, lat: float, lon: float, min_rating: float | None = None
+) -> list[dict[str, Any]]:
+    """Найти места рядом С РЕЙТИНГАМИ (через реальный браузер Карт — проходит анти-бот).
+    Возвращает name, rating, reviews, categories, address, distance_m, lat/lon, oid, hours —
+    отсортировано по близости. min_rating — фильтр (например 4.8). lat/lon — координаты
+    пользователя. Медленнее обычного поиска (запускает браузер), зато с рейтингами и близостью."""
+    return await geo_browser.search_rated(text, lat, lon, min_rating=min_rating)
 
 
 @mcp.tool()

@@ -20,11 +20,16 @@ api = [
 mcp = [
     "mcp>=1.2,<2",
 ]
+# Гео-поиск с рейтингами через headless-браузер
+geo = [
+    "playwright>=1.40",
+]
 # Всё сразу
 all = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "mcp>=1.2,<2",
+    "playwright>=1.40",
 ]
 
 [build-system]

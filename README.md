@@ -94,11 +94,16 @@ claude mcp add alice-notify -- python -m alice_notify.mcp_server
 `alice_list_colors`, `alice_get_light_colors`, `alice_set_light_color`, `alice_set_lights`,
 `alice_list_scenarios`, `alice_get_scenario`, `alice_create_scenario`,
 `alice_update_scenario`, `alice_delete_scenario`, `alice_run_scenario`,
-`alice_find_places`, `alice_build_route`.
+`alice_find_places`, `alice_find_places_rated`, `alice_build_route`.
 
-Гео-тулы работают через ту же сессию Яндекса: `alice_find_places` — подсказки мест Карт
-(конкретные названия/сети — с расстоянием; полноценный поиск ближайших/по рейтингу закрыт
-анти-ботом Карт), `alice_build_route` — ссылка-маршрут (deeplink, без авторизации).
+Гео-тулы: `alice_find_places` — быстрые подсказки Карт (конкретные названия/сети с расстоянием);
+`alice_find_places_rated` — поиск мест рядом **с рейтингами** через headless-браузер (обходит
+анти-бот Карт: сам считает подпись `s`), фильтр по min_rating и сортировка по близости;
+`alice_build_route` — ссылка-маршрут (deeplink, без авторизации).
+
+> `alice_find_places_rated` требует Chromium в образе (extra `geo` + `playwright install
+> --with-deps chromium`, см. Dockerfile). Первый вызов поднимает браузер (~10–20 c), далее
+> переиспользуется. Медленнее и тяжелее обычного поиска, но даёт рейтинги.
 
 ## REST API (FastAPI)
 
